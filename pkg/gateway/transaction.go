@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package gateway
 
 import (
+	"context"
+
 	"github.com/hyperledger/fabric-protos-go/peer"
 
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
@@ -83,11 +85,46 @@ func WithCollections(collections ...string) TransactionOption {
 	}
 }
 
+// OUR BICYCLE SECTION
+// we want to dynamically replace channel\chaincode names on execution time
+
+// InsecureWithChaincode - OVERWRITE current chaincode name. all next queries will be with this name
+func InsecureWithChaincode(cc string) TransactionOption {
+	return func(txn *Transaction) error {
+		txn.request.ChaincodeID = cc
+		txn.contract.chaincodeID = cc
+		return nil
+	}
+}
+
+// WithWalletIdentity - OVERWRITE current wallet on transaction stage
+// all next queries will be with this name
+func InsecureWithWalletIdentity(setIdentityFn IdentityOption) TransactionOption {
+	return func(txn *Transaction) error {
+		return setIdentityFn(txn.contract.network.gateway)
+	}
+}
+
+// InsecureWithChannel - OVERWRITE channel connection
+// all next queries will be with this name
+func InsecureWithChannel(chName string) TransactionOption {
+	return func(txn *Transaction) error {
+		n, err := txn.contract.network.gateway.GetNetwork(chName)
+		if err != nil {
+			return err
+		}
+
+		txn.contract.network = n
+		txn.contract.client = n.client
+		return nil
+	}
+}
+
 // Evaluate a transaction function and return its results.
 // The transaction function will be evaluated on the endorsing peers but
 // the responses will not be sent to the ordering service and hence will
 // not be committed to the ledger. This can be used for querying the world state.
-func (txn *Transaction) Evaluate(args ...string) ([]byte, error) {
+func (txn *Transaction) Evaluate(ctx context.Context, args ...string) ([]byte, error) {
 	bytes := make([][]byte, len(args))
 	for i, v := range args {
 		bytes[i] = []byte(v)
@@ -99,6 +136,8 @@ func (txn *Transaction) Evaluate(args ...string) ([]byte, error) {
 		options = append(options, channel.WithTargetEndpoints(txn.endorsingPeers...))
 	}
 	options = append(options, channel.WithTimeout(fab.Query, txn.contract.network.gateway.options.Timeout))
+	// TODO we'll have here two timeouts. from config and from ctx. is it ok?
+	options = append(options, channel.WithParentContext(ctx))
 
 	if txn.collections != nil {
 		txn.request.InvocationChain = append(txn.request.InvocationChain, &fab.ChaincodeCall{ID: txn.contract.chaincodeID, Collections: txn.collections})
@@ -118,7 +157,7 @@ func (txn *Transaction) Evaluate(args ...string) ([]byte, error) {
 // Submit a transaction to the ledger. The transaction function represented by this object
 // will be evaluated on the endorsing peers and then submitted to the ordering service
 // for committing to the ledger.
-func (txn *Transaction) Submit(args ...string) ([]byte, error) {
+func (txn *Transaction) Submit(ctx context.Context, args ...string) ([]byte, error) {
 	bytes := make([][]byte, len(args))
 	for i, v := range args {
 		bytes[i] = []byte(v)
@@ -131,6 +170,7 @@ func (txn *Transaction) Submit(args ...string) ([]byte, error) {
 	}
 	options = append(options, channel.WithTimeout(fab.Execute, txn.contract.network.gateway.options.Timeout))
 	options = append(options, channel.WithRetry(retry.DefaultChannelOpts))
+	options = append(options, channel.WithParentContext(ctx))
 
 	if txn.collections != nil {
 		txn.request.InvocationChain = append(txn.request.InvocationChain, &fab.ChaincodeCall{ID: txn.contract.chaincodeID, Collections: txn.collections})
