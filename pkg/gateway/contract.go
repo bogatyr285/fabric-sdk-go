@@ -7,6 +7,8 @@ SPDX-License-Identifier: Apache-2.0
 package gateway
 
 import (
+	"context"
+
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 )
@@ -44,14 +46,14 @@ func (c *Contract) Name() string {
 //
 //  Returns:
 //  The return value of the transaction function in the smart contract.
-func (c *Contract) EvaluateTransaction(name string, args ...string) ([]byte, error) {
+func (c *Contract) EvaluateTransaction(ctx context.Context, name string, args ...string) ([]byte, error) {
 	txn, err := c.CreateTransaction(name)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return txn.Evaluate(args...)
+	return txn.Evaluate(ctx, args...)
 }
 
 // SubmitTransaction will submit a transaction to the ledger. The transaction function 'name'
@@ -63,14 +65,14 @@ func (c *Contract) EvaluateTransaction(name string, args ...string) ([]byte, err
 //
 //  Returns:
 //  The return value of the transaction function in the smart contract.
-func (c *Contract) SubmitTransaction(name string, args ...string) ([]byte, error) {
+func (c *Contract) SubmitTransaction(ctx context.Context, name string, args ...string) ([]byte, error) {
 	txn, err := c.CreateTransaction(name)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return txn.Submit(args...)
+	return txn.Submit(ctx, args...)
 }
 
 // CreateTransaction creates an object representing a specific invocation of a transaction
